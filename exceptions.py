@@ -10,7 +10,13 @@ class JSONWithError(Exception):
     pass
 
 
-class HomeworksWithoutKeys(Exception):
-    """В домашней работе нет ключей, которые указаны в документации."""
+class MessageError(Exception):
+    """Не удалось отправить сообщение."""
+
+    pass
+
+
+class ParseError(Exception):
+    """Не подходящий параметр."""
 
     pass

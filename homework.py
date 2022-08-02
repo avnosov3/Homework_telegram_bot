@@ -1,12 +1,15 @@
-import requests
 import os
 import time
 import logging
 
+import requests
 import telegram
 from dotenv import load_dotenv
 
-from exceptions import StatusCodeNotOK, JSONWithError, HomeworksWithoutKeys
+from exceptions import (
+    StatusCodeNotOK, JSONWithError,
+    MessageError, ParseError
+)
 
 load_dotenv()
 
@@ -33,7 +36,7 @@ NO_KEY = 'Нет ключа {key} '
 HOMEWORK_MESSAGE = (
     'Изменился статус проверки работы "{homework_name}". {homework_status}'
 )
-LIST_ERROR = 'Ответ API не в виде списка'
+FORMAT_ERROR = 'Ответ API в формате: {format}. Ожидается dict.'
 REQUEST_ERROR = (
     'Сбой сети. ENPOINT: {endpoint}. HEADERS: {headers}. PARAMS: {params}.'
     'STATUS: {status}.'
@@ -42,11 +45,16 @@ SERVER_ERROR = (
     'Отказ сервера. ENPOINT: {endpoint}. HEADERS: {headers}. PARAMS: {params}.'
     'STATUS: {status}.'
 )
+JSON_ERROR = (
+    'Отказ сервера. ENPOINT: {endpoint}. HEADERS: {headers}. PARAMS: {params}.'
+    'KEY: {key}. VALUE: {value}'
+)
 ERROR = 'Сбой в работе программы: {error}'
 OLD_MESSAGE = 'Никаких новых сообщений не было'
+MESSAGE_ERROR = 'Не удалось отправить сообщение: {message}. {error}.'
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-handler = logging.FileHandler(__name__ + '.log')
+handler = logging.FileHandler(__file__ + '.log')
 logger.addHandler(handler)
 formatter = logging.Formatter(
     '%(asctime)s %(levelname)s %(funcName)s %(message)s'
@@ -56,79 +64,82 @@ handler.setFormatter(formatter)
 
 def send_message(bot, message):
     """Функция отправляет сообщение в телеграмм."""
-    return bot.send_message(TELEGRAM_CHAT_ID, message)
+    try:
+        return bot.send_message(TELEGRAM_CHAT_ID, message)
+    except Exception as error:
+        raise MessageError(
+            MESSAGE_ERROR.format(
+                message=message,
+                error=error
+            )
+        )
 
 
 def get_api_answer(current_timestamp):
     """Преобразование ответа  API."""
     params = {'from_date': current_timestamp}
+    request_params = dict(
+        url=ENDPOINT,
+        headers=HEADERS,
+        params=params
+    )
     try:
-        response = requests.get(ENDPOINT, headers=HEADERS, params=params)
-        if response.status_code != 200:
-            raise StatusCodeNotOK(
-                SERVER_ERROR.format(
-                    endpoint=ENDPOINT,
-                    headers=HEADERS,
-                    params=params,
-                    status=response.status_code
-                )
-            )
-        elif 'error' in response.json():
-            raise JSONWithError(
-                SERVER_ERROR.format(
-                    endpoint=ENDPOINT,
-                    headers=HEADERS,
-                    params=params,
-                    status=response.status_code
-                )
-            )
-        else:
-            return response.json()
-    except requests.RequestException:
-        raise requests.RequestException(
-            REQUEST_ERROR.format(
+        response = requests.get(**request_params)
+        status = response.status_code
+    except ConnectionError as error:
+        raise ConnectionError(error)
+    if status != 200:
+        raise StatusCodeNotOK(
+            SERVER_ERROR.format(
                 endpoint=ENDPOINT,
                 headers=HEADERS,
                 params=params,
-                status='нет ответа'
+                status=status
             )
         )
+    json = response.json()
+    for error in ('error', 'code'):
+        if error in json:
+            raise JSONWithError(
+                JSON_ERROR.format(
+                    endpoint=ENDPOINT,
+                    headers=HEADERS,
+                    params=params,
+                    key=error,
+                    value=json[error],
+                )
+            )
+    return json
 
 
 def check_response(response):
     """Проверка содержания ответа."""
-    if isinstance(response, dict):
-        try:
-            homeworks = response['homeworks']
-            if not isinstance(homeworks, list):
-                raise TypeError(LIST_ERROR)
-            else:
-                return homeworks
-        except KeyError:
-            raise KeyError(
-                NO_KEY.format(key='homeworks')
-            )
-    raise TypeError(JSONWithError.__doc__)
+    if not isinstance(response, dict):
+        raise TypeError(FORMAT_ERROR.format(
+            format=type(response)))
+    if 'homeworks' not in response:
+        raise KeyError(
+            NO_KEY.format(key='homeworks')
+        )
+    homeworks = response['homeworks']
+    if not isinstance(homeworks, list):
+        raise TypeError(FORMAT_ERROR.format(
+            format=type(homeworks)))
+    return homeworks
 
 
 def parse_status(homework):
     """Парсинг ответа от API."""
-    try:
-        homework_name = homework['homework_name']
-        homework_status = homework['status']
-        if homework_status in HOMEWORK_VERDICTS:
-            return HOMEWORK_MESSAGE.format(
-                homework_name=homework_name,
-                homework_status=HOMEWORK_VERDICTS.get(homework_status)
-            )
-        else:
-            raise KeyError(
-                HomeworksWithoutKeys.__doc__
-            )
-    except HomeworksWithoutKeys:
-        raise HomeworksWithoutKeys(
-            HomeworksWithoutKeys.__doc__
+    name = homework['homework_name']
+    status = homework['status']
+    if status in HOMEWORK_VERDICTS:
+        return HOMEWORK_MESSAGE.format(
+            homework_name=name,
+            homework_status=HOMEWORK_VERDICTS.get(status)
         )
+    raise ParseError(
+        NO_KEY.format(key='status')
+    )
 
 
 def check_tokens():
@@ -149,34 +160,33 @@ def main():
         raise KeyError(TOKEN_ERROR)
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
-    current_last_homework = ''
+    current_id = ''
     while True:
         try:
             response = get_api_answer(current_timestamp)
             homeworks = check_response(response)
-            if homeworks:
-                last_homework = parse_status(homeworks[0])
-                if last_homework != current_last_homework:
-                    send_message(
-                        bot,
-                        last_homework
-                    )
-                    current_last_homework = last_homework
-                    current_timestamp = response.get(
-                        'current_date', current_timestamp
-                    )
+            last_homework = parse_status(homeworks[0])
+            last_id = last_homework['id']
+            if last_id != current_id:
+                send_message(
+                    bot,
+                    last_homework
+                )
+                current_id = last_id
+                current_timestamp = response.get(
+                    'current_date', current_timestamp
+                )
             else:
                 logger.debug(OLD_MESSAGE)
-
+                time.sleep(RETRY_TIME)
         except Exception as error:
-            logger.error(ERROR.format(error=error))
+            main_error = ERROR.format(error=error)
+            logger.error(main_error)
             send_message(
                 bot,
-                ERROR.format(error=error)
+                main_error
             )
             time.sleep(RETRY_TIME)
-        else:
-            pass
 
 
 if __name__ == '__main__':
