@@ -4,7 +4,13 @@ class StatusCodeNotOK(Exception):
     pass
 
 
-class JSONDecodeError(Exception):
-    """Ошибка преобразования к типам данных Python."""
+class JSONWithError(Exception):
+    """Ошибка от сервера."""
+
+    pass
+
+
+class HomeworksWithoutKeys(Exception):
+    """В домашней работе нет ключей, которые указаны в документации."""
 
     pass

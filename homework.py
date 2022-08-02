@@ -1,11 +1,12 @@
 import requests
 import os
 import time
-import telegram
 import logging
+
+import telegram
 from dotenv import load_dotenv
 
-from exceptions import StatusCodeNotOK, JSONDecodeError
+from exceptions import StatusCodeNotOK, JSONWithError, HomeworksWithoutKeys
 
 load_dotenv()
 
@@ -16,31 +17,41 @@ TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 RETRY_TIME = 600
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
-
-HOMEWORK_STATUSES = {
+HOMEWORK_VERDICTS = {
     'approved': 'Работа проверена: ревьюеру всё понравилось. Ура!',
     'reviewing': 'Работа взята на проверку ревьюером.',
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
-
 TOKENS = (
     'PRACTICUM_TOKEN',
     'TELEGRAM_TOKEN',
     'TELEGRAM_CHAT_ID',
 )
-
-NO_TOKEN = 'Отсутствует обязательная переменная окружения {token}'
-STATUS_CODE = 'Status code: {status} '
-API_FAILURE = 'Сбой: Эндпоинт {endpoint}. Код ответа API: {status}'
+NO_TOKEN = 'Отсутствуют переменные окружения: {tokens}'
+TOKEN_ERROR = 'Проблема с токенами'
 NO_KEY = 'Нет ключа {key} '
 HOMEWORK_MESSAGE = (
     'Изменился статус проверки работы "{homework_name}". {homework_status}'
 )
-JSON_ERROR = 'ошибка преобразования к типам данных Python '
 LIST_ERROR = 'Ответ API не в виде списка'
-EMPTY = 'Пустой словарь'
-NO_DICT = 'Получен НЕ словарь'
-GOOD = 'try выполнился'
+REQUEST_ERROR = (
+    'Сбой сети. ENPOINT: {endpoint}. HEADERS: {headers}. PARAMS: {params}.'
+    'STATUS: {status}.'
+)
+SERVER_ERROR = (
+    'Отказ сервера. ENPOINT: {endpoint}. HEADERS: {headers}. PARAMS: {params}.'
+    'STATUS: {status}.'
+)
+ERROR = 'Сбой в работе программы: {error}'
+OLD_MESSAGE = 'Никаких новых сообщений не было'
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+handler = logging.FileHandler(__name__ + '.log')
+logger.addHandler(handler)
+formatter = logging.Formatter(
+    '%(asctime)s %(levelname)s %(funcName)s %(message)s'
+)
+handler.setFormatter(formatter)
 
 
 def send_message(bot, message):
@@ -50,102 +61,154 @@ def send_message(bot, message):
 
 def get_api_answer(current_timestamp):
     """Преобразование ответа  API."""
-    timestamp = current_timestamp or int(time.time())
+    params = {'from_date': current_timestamp}
     try:
-        homeworks = requests.get(ENDPOINT, headers=HEADERS, params={
-            'from_date': timestamp})
-        if homeworks.status_code != 200:
-            logging.error(
-                API_FAILURE.format(
+        response = requests.get(ENDPOINT, headers=HEADERS, params=params)
+        if response.status_code != 200:
+            raise StatusCodeNotOK(
+                SERVER_ERROR.format(
                     endpoint=ENDPOINT,
-                    status=homeworks.status_code
+                    headers=HEADERS,
+                    params=params,
+                    status=response.status_code
                 )
             )
-            raise StatusCodeNotOK(
-                STATUS_CODE.FORMAT(status=homeworks.status_code)
+        elif 'error' in response.json():
+            raise JSONWithError(
+                SERVER_ERROR.format(
+                    endpoint=ENDPOINT,
+                    headers=HEADERS,
+                    params=params,
+                    status=response.status_code
+                )
             )
         else:
-            try:
-                return homeworks.json()
-            except JSONDecodeError:
-                logging.error(JSON_ERROR)
-    except StatusCodeNotOK:
-        logging.error(
-            API_FAILURE.format(endpoint=ENDPOINT, status=homeworks.status_code)
+            return response.json()
+    except requests.RequestException:
+        raise requests.RequestException(
+            REQUEST_ERROR.format(
+                endpoint=ENDPOINT,
+                headers=HEADERS,
+                params=params,
+                status='нет ответа'
+            )
         )
 
 
 def check_response(response):
     """Проверка содержания ответа."""
-    if type(response) == dict:
-        if type(response['homeworks']) is not list:
-            logging.error(LIST_ERROR)
-            raise KeyError
-        return response['homeworks']
-        # return response.get('homeworks')[0]
-    else:
-        logging.error(NO_KEY.format(key='homeworks'))
-        raise TypeError
+    if isinstance(response, dict):
+        try:
+            homeworks = response['homeworks']
+            if not isinstance(homeworks, list):
+                raise TypeError(LIST_ERROR)
+            else:
+                return homeworks
+        except KeyError:
+            raise KeyError(
+                NO_KEY.format(key='homeworks')
+            )
+    raise TypeError(JSONWithError.__doc__)
 
 
 def parse_status(homework):
     """Парсинг ответа от API."""
-    if homework:
-        homework_name = homework.get('homework_name')
-        if not homework_name:
-            logging.error(NO_KEY.format(key='homework_name'))
-            raise KeyError
-        homework_status = homework.get('status')
-        if homework_status in HOMEWORK_STATUSES.keys():
+    try:
+        homework_name = homework['homework_name']
+        homework_status = homework['status']
+        if homework_status in HOMEWORK_VERDICTS:
             return HOMEWORK_MESSAGE.format(
                 homework_name=homework_name,
-                homework_status=HOMEWORK_STATUSES.get(homework_status)
+                homework_status=HOMEWORK_VERDICTS.get(homework_status)
             )
         else:
-            logging.error(NO_DICT)
-            raise KeyError
-    else:
-        logging.error(EMPTY)
+            raise KeyError(
+                HomeworksWithoutKeys.__doc__
+            )
+    except HomeworksWithoutKeys:
+        raise HomeworksWithoutKeys(
+            HomeworksWithoutKeys.__doc__
+        )
 
 
 def check_tokens():
     """Проверка переменных окружения."""
-    no_tokens = []
-    for name in TOKENS:
-        if name not in globals() or not globals()[name]:
-            no_tokens.append(False)
+    no_tokens = [
+        name for name in TOKENS
+        if name not in globals() or not globals()[name]
+    ]
     if no_tokens:
-        logging.critical(NO_TOKEN.format(token=name))
+        logger.critical(NO_TOKEN.format(tokens=no_tokens))
         return False
     return True
 
 
 def main():
     """Основная логика работы бота."""
-    logging.basicConfig(
-        format='%(asctime)s %(levelname)s %(funcName)s %(message)s',
-        level=logging.DEBUG,
-        filename='main.log',
-        filemode='w'
-    )
     if not check_tokens():
-        exit()
+        raise KeyError(TOKEN_ERROR)
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
+    current_last_homework = ''
     while True:
         try:
-            response = check_response(get_api_answer(current_timestamp))
+            response = get_api_answer(current_timestamp)
+            homeworks = check_response(response)
+            if homeworks:
+                last_homework = parse_status(homeworks[0])
+                if last_homework != current_last_homework:
+                    send_message(
+                        bot,
+                        last_homework
+                    )
+                    current_last_homework = last_homework
+                    current_timestamp = response.get(
+                        'current_date', current_timestamp
+                    )
+            else:
+                logger.debug(OLD_MESSAGE)
+
+        except Exception as error:
+            logger.error(ERROR.format(error=error))
             send_message(
                 bot,
-                parse_status(response)
+                ERROR.format(error=error)
             )
             time.sleep(RETRY_TIME)
-        except Exception as error:
-            logging.error(f'Сбой в работе программы: {error}')
-            time.sleep(RETRY_TIME)
         else:
-            logging.info(GOOD)
+            pass
 
 
 if __name__ == '__main__':
     main()
+    # from unittest import TestCase, mock, main as uni_main
+    # ReqEx = requests.RequestException
+    # JSON = {'error': 'testing'}
+    # JSON = {'homeworks': [{'homework_name': 'test', 'status': 'test'}]}
+    # JSON = {'homeworks': 1}
+
+    # class TestReq(TestCase):
+    #     @mock.patch('requests.get')
+    #     def test_raised(self, rq_get):
+    #         rq_get.side_effect = mock.Mock(
+    #             side_effect=ReqEx('testing')
+    #         )
+    #         main()
+
+    #     @mock.patch('requests.get')
+    #     def test_error(self, rq_get):
+    #         resp = mock.Mock()
+    #         resp.json = mock.Mock(
+    #             return_value=JSON)
+    #         rq_get.return_value = resp
+    #         main()
+
+    #     @mock.patch('requests.get')
+    #     def test_status_code(self, rq_get):
+    #         resp = mock.Mock()
+    #         resp.status_code = mock.Mock(
+    #             return_value=333
+    #         )
+    #         rq_get.return_value = resp
+    #         main()
+    # uni_main()
