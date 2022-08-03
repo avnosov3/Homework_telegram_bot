@@ -98,9 +98,7 @@ def get_api_answer(current_timestamp):
         if error in json:
             raise JSONWithError(
                 JSON_ERROR.format(
-                    endpoint=URL,
-                    headers=HEADERS,
-                    params=params,
+                    **request_params,
                     key=error,
                     value=json[error],
                 )
@@ -134,7 +132,7 @@ def parse_status(homework):
             homework_status=HOMEWORK_VERDICTS.get(status)
         )
     raise ValueError(
-        VALUE_ERROR.format(status='status')
+        VALUE_ERROR.format(status=status)
     )
 
 
@@ -175,6 +173,7 @@ def main():
                 time.sleep(RETRY_TIME)
             else:
                 logger.debug(OLD_MESSAGE)
+                time.sleep(RETRY_TIME)
         except Exception as error:
             main_error = ERROR.format(error=error)
             logger.error(main_error)
@@ -184,9 +183,11 @@ def main():
                     main_error
                 )
             except SendMessageError as error:
-                raise MESSAGE_ERROR.format(
-                    message=main_error,
-                    error=error
+                logger.error(
+                    MESSAGE_ERROR.format(
+                        message=main_error,
+                        error=error
+                    )
                 )
 
 
