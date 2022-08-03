@@ -189,6 +189,7 @@ def main():
                         error=error
                     )
                 )
+                time.sleep(RETRY_TIME)
 
 
 if __name__ == '__main__':
