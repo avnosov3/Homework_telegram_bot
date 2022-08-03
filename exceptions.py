@@ -20,3 +20,9 @@ class ParseError(Exception):
     """Не подходящий параметр."""
 
     pass
+
+
+class SendMessageError(Exception):
+    """Ошибка при отправлении сообщения."""
+
+    pass

@@ -1,14 +1,14 @@
+import logging
 import os
 import time
-import logging
 
+from dotenv import load_dotenv
 import requests
 import telegram
-from dotenv import load_dotenv
 
 from exceptions import (
-    StatusCodeNotOK, JSONWithError,
-    MessageError, ParseError
+    JSONWithError, MessageError,
+    SendMessageError, StatusCodeNotOK
 )
 
 load_dotenv()
@@ -18,7 +18,7 @@ TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
 RETRY_TIME = 600
-ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
+URL = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 HOMEWORK_VERDICTS = {
     'approved': 'Работа проверена: ревьюеру всё понравилось. Ура!',
@@ -32,23 +32,23 @@ TOKENS = (
 )
 NO_TOKEN = 'Отсутствуют переменные окружения: {tokens}'
 TOKEN_ERROR = 'Проблема с токенами'
-NO_KEY = 'Нет ключа {key} '
+VALUE_ERROR = 'Неожиданное значение статуса: {status} '
 HOMEWORK_MESSAGE = (
     'Изменился статус проверки работы "{homework_name}". {homework_status}'
 )
-FORMAT_ERROR = 'Ответ API в формате: {format}. Ожидается dict.'
+FORMAT_ERROR = 'Ожидаем list, а получили {format}.'
 REQUEST_ERROR = (
-    'Сбой сети. ENPOINT: {endpoint}. HEADERS: {headers}. PARAMS: {params}.'
-    'STATUS: {status}.'
+    'Сбой сети. ENPOINT: {url}. HEADERS: {headers}. PARAMS: {params}.'
+    'ERROR: {error}.'
 )
 SERVER_ERROR = (
-    'Отказ сервера. ENPOINT: {endpoint}. HEADERS: {headers}. PARAMS: {params}.'
-    'STATUS: {status}.'
+    'Отказ сервера. ENPOINT: {url}. HEADERS: {headers}. PARAMS: {params}.'
 )
 JSON_ERROR = (
-    'Отказ сервера. ENPOINT: {endpoint}. HEADERS: {headers}. PARAMS: {params}.'
+    'Отказ сервера. ENPOINT: {url}. HEADERS: {headers}. PARAMS: {params}.'
     'KEY: {key}. VALUE: {value}'
 )
+NO_KEY = 'Нет ключа: {key}'
 ERROR = 'Сбой в работе программы: {error}'
 OLD_MESSAGE = 'Никаких новых сообщений не было'
 MESSAGE_ERROR = 'Не удалось отправить сообщение: {message}. {error}.'
@@ -79,30 +79,26 @@ def get_api_answer(current_timestamp):
     """Преобразование ответа  API."""
     params = {'from_date': current_timestamp}
     request_params = dict(
-        url=ENDPOINT,
+        url=URL,
         headers=HEADERS,
         params=params
     )
     try:
         response = requests.get(**request_params)
-        status = response.status_code
-    except ConnectionError as error:
-        raise ConnectionError(error)
+    except requests.RequestException as error:
+        raise REQUEST_ERROR(**request_params,
+                            error=error)
+    status = response.status_code
     if status != 200:
         raise StatusCodeNotOK(
-            SERVER_ERROR.format(
-                endpoint=ENDPOINT,
-                headers=HEADERS,
-                params=params,
-                status=status
-            )
+            SERVER_ERROR.format(**request_params)
         )
     json = response.json()
     for error in ('error', 'code'):
         if error in json:
             raise JSONWithError(
                 JSON_ERROR.format(
-                    endpoint=ENDPOINT,
+                    endpoint=URL,
                     headers=HEADERS,
                     params=params,
                     key=error,
@@ -137,8 +133,8 @@ def parse_status(homework):
             homework_name=name,
             homework_status=HOMEWORK_VERDICTS.get(status)
         )
-    raise ParseError(
-        NO_KEY.format(key='status')
+    raise ValueError(
+        VALUE_ERROR.format(status='status')
     )
 
 
@@ -176,17 +172,22 @@ def main():
                 current_timestamp = response.get(
                     'current_date', current_timestamp
                 )
+                time.sleep(RETRY_TIME)
             else:
                 logger.debug(OLD_MESSAGE)
-                time.sleep(RETRY_TIME)
         except Exception as error:
             main_error = ERROR.format(error=error)
             logger.error(main_error)
-            send_message(
-                bot,
-                main_error
-            )
-            time.sleep(RETRY_TIME)
+            try:
+                send_message(
+                    bot,
+                    main_error
+                )
+            except SendMessageError as error:
+                raise MESSAGE_ERROR.format(
+                    message=main_error,
+                    error=error
+                )
 
 
 if __name__ == '__main__':
