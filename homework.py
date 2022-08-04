@@ -170,26 +170,24 @@ def main():
                 current_timestamp = response.get(
                     'current_date', current_timestamp
                 )
-                time.sleep(RETRY_TIME)
             else:
                 logger.debug(OLD_MESSAGE)
-                time.sleep(RETRY_TIME)
         except Exception as error:
             main_error = ERROR.format(error=error)
             logger.error(main_error)
-            try:
-                send_message(
-                    bot,
-                    main_error
-                )
-            except SendMessageError as error:
-                logger.error(
-                    MESSAGE_ERROR.format(
-                        message=main_error,
-                        error=error
-                    )
-                )
-                time.sleep(RETRY_TIME)
+            # try:
+            #     send_message(
+            #         bot,
+            #         main_error
+            #     )
+            # except SendMessageError as error:
+            #     logger.error(
+            #         MESSAGE_ERROR.format(
+            #             message=main_error,
+            #             error=error
+            #         )
+            #     )
+        time.sleep(RETRY_TIME)
 
 
 if __name__ == '__main__':
