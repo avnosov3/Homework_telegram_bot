@@ -175,18 +175,18 @@ def main():
         except Exception as error:
             main_error = ERROR.format(error=error)
             logger.error(main_error)
-            # try:
-            #     send_message(
-            #         bot,
-            #         main_error
-            #     )
-            # except SendMessageError as error:
-            #     logger.error(
-            #         MESSAGE_ERROR.format(
-            #             message=main_error,
-            #             error=error
-            #         )
-            #     )
+            try:
+                send_message(
+                    bot,
+                    main_error
+                )
+            except SendMessageError as error:
+                logger.error(
+                    MESSAGE_ERROR.format(
+                        message=main_error,
+                        error=error
+                    )
+                )
         time.sleep(RETRY_TIME)
 
 
