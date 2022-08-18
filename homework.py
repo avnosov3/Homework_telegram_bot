@@ -37,16 +37,19 @@ HOMEWORK_MESSAGE = (
     'Изменился статус проверки работы "{homework_name}". {homework_status}'
 )
 FORMAT_ERROR = 'Ожидаем list, а получили {format}.'
-REQUEST_ERROR = (
-    'Сбой сети. ENPOINT: {url}. HEADERS: {headers}. PARAMS: {params}.'
-    'ERROR: {error}.'
+API_REQUEST = (
+    'ЗАПРОС по параметрам: ENPOINT: {url}. HEADERS: {headers}. PARAMS: {params}. '
 )
-SERVER_ERROR = (
-    'Отказ сервера. ENPOINT: {url}. HEADERS: {headers}. PARAMS: {params}.'
+REQUEST_ERROR = (
+    'Сбой сети. '
+    + API_REQUEST
+    + 'ERROR: {error}.'
+)
+STATUS_CODE_ERROR = (
+    'Неожиданный код возврата: {status_code}. ' + API_REQUEST
 )
 JSON_ERROR = (
-    'Отказ сервера. ENPOINT: {url}. HEADERS: {headers}. PARAMS: {params}.'
-    'KEY: {key}. VALUE: {value}'
+    'Отказ сервера. KEY: {key}. VALUE: {value} ' + API_REQUEST
 )
 NO_KEY = 'Нет ключа: {key}'
 ERROR = 'Сбой в работе программы: {error}'
@@ -86,12 +89,15 @@ def get_api_answer(current_timestamp):
     try:
         response = requests.get(**request_params)
     except requests.RequestException as error:
-        raise REQUEST_ERROR(**request_params,
-                            error=error)
+        raise ConnectionError(
+            REQUEST_ERROR.format(
+                error=error,
+                **request_params)
+            )
     status = response.status_code
     if status != 200:
         raise StatusCodeNotOK(
-            SERVER_ERROR.format(**request_params)
+            STATUS_CODE_ERROR.format(status_code=status, **request_params)
         )
     json = response.json()
     for error in ('error', 'code'):
@@ -174,7 +180,8 @@ def main():
                 logger.debug(OLD_MESSAGE)
         except Exception as error:
             main_error = ERROR.format(error=error)
-            logger.error(main_error)
+            logger.exception(main_error)
+            # logger.error(main_error)
             try:
                 send_message(
                     bot,
@@ -192,34 +199,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-    # from unittest import TestCase, mock, main as uni_main
-    # ReqEx = requests.RequestException
-    # JSON = {'error': 'testing'}
-    # JSON = {'homeworks': [{'homework_name': 'test', 'status': 'test'}]}
-    # JSON = {'homeworks': 1}
-
-    # class TestReq(TestCase):
-    #     @mock.patch('requests.get')
-    #     def test_raised(self, rq_get):
-    #         rq_get.side_effect = mock.Mock(
-    #             side_effect=ReqEx('testing')
-    #         )
-    #         main()
-
-    #     @mock.patch('requests.get')
-    #     def test_error(self, rq_get):
-    #         resp = mock.Mock()
-    #         resp.json = mock.Mock(
-    #             return_value=JSON)
-    #         rq_get.return_value = resp
-    #         main()
-
-    #     @mock.patch('requests.get')
-    #     def test_status_code(self, rq_get):
-    #         resp = mock.Mock()
-    #         resp.status_code = mock.Mock(
-    #             return_value=333
-    #         )
-    #         rq_get.return_value = resp
-    #         main()
-    # uni_main()
