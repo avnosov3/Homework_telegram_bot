@@ -160,13 +160,14 @@ def main():
         raise KeyError(TOKEN_ERROR)
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
+    current_timestamp = 0
     current_id = ''
     while True:
         try:
             response = get_api_answer(current_timestamp)
             homeworks = check_response(response)
             last_homework = parse_status(homeworks[0])
-            last_id = last_homework['id']
+            last_id = homeworks[0].get('id')
             if last_id != current_id:
                 send_message(
                     bot,
