@@ -30,6 +30,8 @@ TOKENS = (
     'TELEGRAM_TOKEN',
     'TELEGRAM_CHAT_ID',
 )
+
+
 NO_TOKEN = 'Отсутствуют переменные окружения: {tokens}'
 TOKEN_ERROR = 'Проблема с токенами'
 VALUE_ERROR = 'Неожиданное значение статуса: {status} '
@@ -55,6 +57,8 @@ NO_KEY = 'Нет ключа: {key}'
 ERROR = 'Сбой в работе программы: {error}'
 OLD_MESSAGE = 'Никаких новых сообщений не было'
 MESSAGE_ERROR = 'Не удалось отправить сообщение: {message}. {error}.'
+
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 handler = logging.FileHandler(__file__ + '.log')
