@@ -28,12 +28,7 @@ source venv/Scripts/activate (Windows)
 pip3 install -r requirements.txt
 pip install -r requirements.txt (Windows)
 ```
-5. Из папки yatube провести миграции
-```
-python3 manage.py migrate
-python manage.py migrate (Windows)
-```
-6. Запустить файл ```homework.py```
+5. Запустить файл ```homework.py```
 
 ## Автор
 [Артём Носов](https://github.com/avnosov3)
