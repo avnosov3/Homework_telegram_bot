@@ -28,6 +28,12 @@ source venv/Scripts/activate (Windows)
 pip3 install -r requirements.txt
 pip install -r requirements.txt (Windows)
 ```
+6. Создать и заполнить файл .env
+```
+PRACTICUM_TOKEN = <Получить токен [здесь](https://passport.yandex.ru/auth?retpath=https%3A%2F%2Foauth.yandex.ru%2Fauthorize%3Fresponse_type%3Dtoken%26client_id%3D1d0b9dd4d652455a9eb710d450ff456a&noreturn=1&origin=oauth)>
+TELEGRAM_TOKEN = <Указать токен телеграмм бота>
+TELEGRAM_CHAT_ID = <Указать chat_id вашего аккаунта>
+```
 5. Запустить файл ```homework.py```
 
 ## Автор
