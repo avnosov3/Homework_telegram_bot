@@ -31,9 +31,9 @@ pip install -r requirements.txt (Windows)
 5. [Получить](https://passport.yandex.ru/auth?retpath=https%3A%2F%2Foauth.yandex.ru%2Fauthorize%3Fresponse_type%3Dtoken%26client_id%3D1d0b9dd4d652455a9eb710d450ff456a&noreturn=1&origin=oauth) токен API сервиса Яндекс.Домашка
 6. Создать и заполнить файл .env
 ```
-PRACTICUM_TOKEN = <Указать токен>
-TELEGRAM_TOKEN = <Указать токен телеграмм бота>
-TELEGRAM_CHAT_ID = <Указать chat_id вашего аккаунта>
+PRACTICUM_TOKEN=<Указать токен>
+TELEGRAM_TOKEN=<Указать токен телеграмм бота>
+TELEGRAM_CHAT_ID=<Указать chat_id вашего аккаунта>
 ```
 7. Запустить файл ```homework.py```
 
