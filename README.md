@@ -8,11 +8,11 @@ Telegram-бот обращается к API сервиса Практикум.Д
 ## Запуск проекта
 1. Клонировать репозиторий
 ```
-git@github.com:avnosov3/homework_bot.git
+git@github.com:avnosov3/Homework_telegram_bot.git
 ```
 2. Перейти в папку с проектом и создать виртуальное окружение
 ```
-cd homework_bot
+cd Homework_telegram_bot
 ```
 ```
 python3 -m venv env
